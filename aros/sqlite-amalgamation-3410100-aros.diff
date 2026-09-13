@@ -1,0 +1,53 @@
+diff -ruN sqlite-amalgamation-3410100/sqlite3.c /home/kalamatee/builds/AROS/pc-x86_64-gcc16/bin/pc-x86_64/Ports/openmw/sqlite3/sqlite-amalgamation-3410100/sqlite3.c
+--- a/sqlite3.c	2023-03-10 13:59:24.000000000 +0000
++++ b/sqlite3.c	2026-09-13 01:11:00.600298413 +0100
+@@ -28159,6 +28159,17 @@
+ 
+ #include <pthread.h>
+ 
++#ifdef __AROS__
++/* The AROS pthread.h drags in exec/types.h, whose GLOBAL macro (extern)
++** clobbers the one defined above; restore it. */
++# undef GLOBAL
++# ifdef SQLITE_OMIT_WSD
++#  define GLOBAL(t,v) (*(t*)sqlite3_wsd_find((void*)&(v), sizeof(v)))
++# else
++#  define GLOBAL(t,v) v
++# endif
++#endif
++
+ /*
+ ** The sqlite3_mutex.id, sqlite3_mutex.nRef, and sqlite3_mutex.owner fields
+ ** are necessary under two condidtions:  (1) Debug builds and (2) using
+diff -ruN sqlite-amalgamation-3410100/sqlite3.c sqlite-amalgamation-3410100.aros/sqlite3.c
+--- sqlite-amalgamation-3410100/sqlite3.c
++++ sqlite-amalgamation-3410100.aros/sqlite3.c
+@@ -43518,6 +43518,28 @@
+   path.nSymlink = 0;
+   path.nOut = nOut;
+   path.zOut = zOut;
++#ifdef __AROS__
++  /* AROS paths: "Volume:dir/file" is absolute, anything else is relative to
++  ** the current directory, and joining never starts with a '/' (that would
++  ** mean the parent directory / a volume named "/..." to DOS). */
++  {
++    const char *zColon = strchr(zPath, ':');
++    const char *zSlash = strchr(zPath, '/');
++    if( zColon && (zSlash==0 || zColon<zSlash) ){
++      sqlite3_snprintf(nOut, zOut, "%s", zPath);
++    }else{
++      char zPwd[SQLITE_MAX_PATHLEN+2];
++      size_t nPwd;
++      if( osGetcwd(zPwd, sizeof(zPwd)-2)==0 ){
++        return unixLogError(SQLITE_CANTOPEN_BKPT, "getcwd", zPath);
++      }
++      nPwd = strlen(zPwd);
++      sqlite3_snprintf(nOut, zOut, "%s%s%s", zPwd,
++                       (nPwd && zPwd[nPwd-1]!=':' && zPwd[nPwd-1]!='/') ? "/" : "", zPath);
++    }
++    return SQLITE_OK;
++  }
++#endif
+   if( zPath[0]!='/' ){
+     char zPwd[SQLITE_MAX_PATHLEN+2];
+     if( osGetcwd(zPwd, sizeof(zPwd)-2)==0 ){

@@ -392,6 +392,24 @@ OMW::Engine::Engine(Files::ConfigurationManager& configurationManager)
     SDL_SetHint(SDL_HINT_MAC_OPENGL_ASYNC_DISPATCH, "1");
     SDL_SetHint(SDL_HINT_ACCELEROMETER_AS_JOYSTICK, "0"); // We use only gamepads
 
+#ifdef __AROS__
+    // AROS: SDL is built without sensor support, and joystick/gamecontroller
+    // backends may be missing too, so only SDL_INIT_VIDEO is mandatory.
+    Uint32 flags = SDL_INIT_VIDEO | SDL_INIT_NOPARACHUTE;
+    if (SDL_WasInit(flags) == 0)
+    {
+        SDL_SetMainReady();
+        if (SDL_Init(flags) != 0)
+        {
+            throw std::runtime_error("Could not initialize SDL! " + std::string(SDL_GetError()));
+        }
+        for (Uint32 optional : { SDL_INIT_JOYSTICK, SDL_INIT_GAMECONTROLLER })
+        {
+            if (SDL_InitSubSystem(optional) != 0)
+                Log(Debug::Warning) << "Optional SDL subsystem unavailable: " << SDL_GetError();
+        }
+    }
+#else
     Uint32 flags
         = SDL_INIT_VIDEO | SDL_INIT_NOPARACHUTE | SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK | SDL_INIT_SENSOR;
     if (SDL_WasInit(flags) == 0)
@@ -402,6 +420,7 @@ OMW::Engine::Engine(Files::ConfigurationManager& configurationManager)
             throw std::runtime_error("Could not initialize SDL! " + std::string(SDL_GetError()));
         }
     }
+#endif
 }
 
 OMW::Engine::~Engine()
@@ -728,8 +747,30 @@ void OMW::Engine::setWindowIcon()
     }
 }
 
+#ifdef __AROS__
+#include <fcntl.h>
+#include <unistd.h>
+namespace
+{
+    // Diagnostic: exercise posixc's failing-open path (which calls into
+    // stdc.library through the per-task base) after each startup stage.
+    void arosCrtProbe(const char* stage)
+    {
+        Log(Debug::Info) << "aros crt probe: " << stage;
+        int fd = ::open("/nonexistent/aros-crt-probe", O_RDONLY);
+        if (fd >= 0)
+            ::close(fd);
+        Log(Debug::Info) << "aros crt probe ok: " << stage << " errno " << errno;
+    }
+}
+#define AROS_CRT_PROBE(stage) arosCrtProbe(stage)
+#else
+#define AROS_CRT_PROBE(stage) ((void)0)
+#endif
+
 void OMW::Engine::prepareEngine()
 {
+    AROS_CRT_PROBE("prepareEngine start");
     mStateManager = std::make_unique<MWState::StateManager>(mCfgMgr.getUserDataPath() / "saves", mContentFiles);
     mEnvironment.setStateManager(*mStateManager);
 
@@ -741,10 +782,12 @@ void OMW::Engine::prepareEngine()
     mViewer->setSceneData(rootNode);
 
     createWindow();
+    AROS_CRT_PROBE("after createWindow");
 
     mVFS = std::make_unique<VFS::Manager>();
 
     VFS::registerArchives(mVFS.get(), mFileCollections, mArchives, true, &mEncoder.get()->getStatelessEncoder());
+    AROS_CRT_PROBE("after registerArchives");
 
     mResourceSystem = std::make_unique<Resource::ResourceSystem>(
         mVFS.get(), Settings::cells().mCacheExpiryDelay, &mEncoder.get()->getStatelessEncoder());
@@ -770,11 +813,13 @@ void OMW::Engine::prepareEngine()
     mViewer->addEventHandler(mScreenCaptureHandler);
 
     mL10nManager = std::make_unique<L10n::Manager>(mVFS.get());
+    AROS_CRT_PROBE("after L10n");
     mL10nManager->setPreferredLocales(Settings::general().mPreferredLocales, Settings::general().mGmstOverridesL10n);
     mEnvironment.setL10nManager(*mL10nManager);
 
     mLuaManager = std::make_unique<MWLua::LuaManager>(mVFS.get(), mResDir / "lua_libs");
     mEnvironment.setLuaManager(*mLuaManager);
+    AROS_CRT_PROBE("after LuaManager");
 
     // Create input and UI first to set up a bootstrapping environment for
     // showing a loading screen and keeping the window responsive while doing so
@@ -838,7 +883,9 @@ void OMW::Engine::prepareEngine()
     mEnvironment.setInputManager(*mInputManager);
 
     // Create sound system
+    AROS_CRT_PROBE("before SoundManager");
     mSoundManager = std::make_unique<MWSound::SoundManager>(mVFS.get(), mUseSound);
+    AROS_CRT_PROBE("after SoundManager");
     mEnvironment.setSoundManager(*mSoundManager);
 
     // Create the world

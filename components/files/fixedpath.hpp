@@ -33,6 +33,12 @@ namespace Files
     typedef MacOsPath TargetPathType;
 }
 
+#elif defined(__AROS__)
+#include <components/files/arospath.hpp>
+namespace Files
+{
+    typedef ArosPath TargetPathType;
+}
 #else
 #error "Unknown platform!"
 #endif

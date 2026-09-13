@@ -1,0 +1,258 @@
+# Copyright (C) 2026, The AROS Development Team. All rights reserved.
+# $Id$
+
+#
+#  This is the AROS specific top level mmakefile to build
+#  OpenMW (https://gitlab.com/OpenMW/openmw), the open source
+#  reimplementation of the Morrowind engine.
+#
+#  OpenMW is a CMake project and is driven through %build_with_cmake.
+#  Only the game engine itself is built; the Qt based launcher, wizard and
+#  construction set are disabled.
+#
+#  Dependencies fall into two groups:
+#
+#    * Provided by the AROS tree (system libraries):
+#        SDL2, OpenAL, Boost (iostreams, program_options), ICU, FFmpeg,
+#        LZ4, Lua, freetype, libpng, libjpeg, zlib, Mesa (OpenGL), pthread
+#
+#    * Bundled by OpenMW's own extern/CMakeLists.txt through FetchContent:
+#        Bullet (double precision), OpenSceneGraph (OpenMW fork), MyGUI,
+#        recastnavigation (OpenMW fork), yaml-cpp, sqlite3
+#      These are fetched here with the AROS %fetch machinery (so they are
+#      cached / patchable like every other port) and handed to CMake via
+#      FETCHCONTENT_SOURCE_DIR_<NAME>, which makes FetchContent use the
+#      unpacked tree instead of downloading at configure time.
+#
+#  The AROS SDL2 and Boost ports ship no CMake package configs, so small
+#  shims in aros/cmake recreate the SDL2::SDL2 / Boost::* imported targets.
+#
+
+include $(SRCDIR)/config/aros-contrib.cfg
+
+OPENMW_EXEDIR  := $(AROS_CONTRIB)/Games/Rpg/OpenMW
+OPENMW_SRCDIR  := $(SRCDIR)/$(CURDIR)
+OPENMW_AROSDIR := $(OPENMW_SRCDIR)/aros
+OPENMW_PKGDIR  := $(GENDIR)/$(CURDIR)/openmw
+OPENMW_PORTS   := $(PORTSDIR)/openmw
+
+#
+#  System library dependencies.
+#
+#MM- rpg-openmw-libs : \
+#MM      development-sdl2 \
+#MM      contrib-openal \
+#MM      compiler-boost \
+#MM      development-libs-boost \
+#MM      contrib-icu4c \
+#MM      contrib-ffmpeg \
+#MM      linklibs-lz4 \
+#MM      contrib-development-lua-lib \
+#MM      workbench-libs-freetype-linklib \
+#MM      workbench-libs-png-linklib \
+#MM      workbench-libs-jpeg-linklib \
+#MM      workbench-libs-z \
+#MM      workbench-libs-mesa-linklib \
+#MM      linklibs-pthread
+
+#
+#  Bundled ("extern") dependencies - versions pinned by OpenMW's
+#  extern/CMakeLists.txt.  github "archive/<tag-or-rev>" archives unpack
+#  into "<repo>-<tag-or-rev>".
+#
+BULLET_VERSION      := 3.17
+BULLET_ARCHBASE     := $(BULLET_VERSION)
+BULLET_ARCHSRCDIR   := bullet3-$(BULLET_VERSION)
+BULLET_REPOSITORIES := github://bulletphysics/bullet3/archive/refs/tags
+
+MYGUI_VERSION       := 3.4.3
+MYGUI_ARCHBASE      := MyGUI$(MYGUI_VERSION)
+MYGUI_ARCHSRCDIR    := mygui-$(MYGUI_ARCHBASE)
+MYGUI_REPOSITORIES  := github://MyGUI/mygui/archive/refs/tags
+
+OSG_REV             := 01cc2b585c8456a4ff843066b7e1a8715558289f
+OSG_ARCHBASE        := $(OSG_REV)
+OSG_ARCHSRCDIR      := osg-$(OSG_REV)
+OSG_REPOSITORIES    := github://OpenMW/osg/archive
+
+RECAST_REV          := 03259f3287ff8330f0d66fcd98d022edddffaa97
+RECAST_ARCHBASE     := $(RECAST_REV)
+RECAST_ARCHSRCDIR   := recastnavigation-$(RECAST_REV)
+RECAST_REPOSITORIES := github://OpenMW/recastnavigation/archive
+
+YAMLCPP_REV         := c2680200486572baf8221ba052ef50b58ecd816e
+YAMLCPP_ARCHBASE    := $(YAMLCPP_REV)
+YAMLCPP_ARCHSRCDIR  := yaml-cpp-$(YAMLCPP_REV)
+YAMLCPP_REPOSITORIES := github://jbeder/yaml-cpp/archive
+
+SQLITE_VERSION      := 3410100
+SQLITE_ARCHBASE     := sqlite-amalgamation-$(SQLITE_VERSION)
+SQLITE_ARCHSRCDIR   := $(SQLITE_ARCHBASE)
+SQLITE_REPOSITORIES := https://www.sqlite.org/2023
+
+#  A patch is only applied when a diff exists in aros/ (%fetch fails on a
+#  missing patch); the %create_patch targets below generate them.
+ifneq ($(wildcard $(OPENMW_AROSDIR)/$(BULLET_ARCHSRCDIR)-aros.diff),)
+BULLET_PATCHSPEC    := $(BULLET_ARCHSRCDIR)-aros.diff:$(BULLET_ARCHSRCDIR):-p1
+else
+BULLET_PATCHSPEC    := ::
+endif
+ifneq ($(wildcard $(OPENMW_AROSDIR)/$(MYGUI_ARCHSRCDIR)-aros.diff),)
+MYGUI_PATCHSPEC     := $(MYGUI_ARCHSRCDIR)-aros.diff:$(MYGUI_ARCHSRCDIR):-p1
+else
+MYGUI_PATCHSPEC     := ::
+endif
+ifneq ($(wildcard $(OPENMW_AROSDIR)/$(OSG_ARCHSRCDIR)-aros.diff),)
+OSG_PATCHSPEC       := $(OSG_ARCHSRCDIR)-aros.diff:$(OSG_ARCHSRCDIR):-p1
+else
+OSG_PATCHSPEC       := ::
+endif
+ifneq ($(wildcard $(OPENMW_AROSDIR)/$(RECAST_ARCHSRCDIR)-aros.diff),)
+RECAST_PATCHSPEC    := $(RECAST_ARCHSRCDIR)-aros.diff:$(RECAST_ARCHSRCDIR):-p1
+else
+RECAST_PATCHSPEC    := ::
+endif
+ifneq ($(wildcard $(OPENMW_AROSDIR)/$(YAMLCPP_ARCHSRCDIR)-aros.diff),)
+YAMLCPP_PATCHSPEC   := $(YAMLCPP_ARCHSRCDIR)-aros.diff:$(YAMLCPP_ARCHSRCDIR):-p1
+else
+YAMLCPP_PATCHSPEC   := ::
+endif
+ifneq ($(wildcard $(OPENMW_AROSDIR)/$(SQLITE_ARCHSRCDIR)-aros.diff),)
+SQLITE_PATCHSPEC    := $(SQLITE_ARCHSRCDIR)-aros.diff:$(SQLITE_ARCHSRCDIR):-p1
+else
+SQLITE_PATCHSPEC    := ::
+endif
+
+%fetch mmake=rpg-openmw-fetch-bullet archive=$(BULLET_ARCHBASE) \
+    destination=$(OPENMW_PORTS)/bullet location=$(PORTSSOURCEDIR)/bullet3 \
+    archive_origins=$(BULLET_REPOSITORIES) suffixes="tar.gz" \
+    patches_origins=$(OPENMW_AROSDIR) \
+    patches_specs=$(BULLET_PATCHSPEC)
+%create_patch mmake=rpg-openmw-create-patch-bullet archive=$(BULLET_ARCHBASE) \
+    suffixes="tar.gz" srcdir=$(BULLET_ARCHSRCDIR) \
+    location=$(PORTSSOURCEDIR)/bullet3 destination=$(OPENMW_PORTS)/bullet
+
+%fetch mmake=rpg-openmw-fetch-mygui archive=$(MYGUI_ARCHBASE) \
+    destination=$(OPENMW_PORTS)/mygui location=$(PORTSSOURCEDIR)/openmw \
+    archive_origins=$(MYGUI_REPOSITORIES) suffixes="zip" \
+    patches_origins=$(OPENMW_AROSDIR) \
+    patches_specs=$(MYGUI_PATCHSPEC)
+%create_patch mmake=rpg-openmw-create-patch-mygui archive=$(MYGUI_ARCHBASE) \
+    suffixes="zip" srcdir=$(MYGUI_ARCHSRCDIR) \
+    location=$(PORTSSOURCEDIR)/openmw destination=$(OPENMW_PORTS)/mygui
+
+%fetch mmake=rpg-openmw-fetch-osg archive=$(OSG_ARCHBASE) \
+    destination=$(OPENMW_PORTS)/osg location=$(PORTSSOURCEDIR)/openmw \
+    archive_origins=$(OSG_REPOSITORIES) suffixes="zip" \
+    patches_origins=$(OPENMW_AROSDIR) \
+    patches_specs=$(OSG_PATCHSPEC)
+%create_patch mmake=rpg-openmw-create-patch-osg archive=$(OSG_ARCHBASE) \
+    suffixes="zip" srcdir=$(OSG_ARCHSRCDIR) \
+    location=$(PORTSSOURCEDIR)/openmw destination=$(OPENMW_PORTS)/osg
+
+%fetch mmake=rpg-openmw-fetch-recast archive=$(RECAST_ARCHBASE) \
+    destination=$(OPENMW_PORTS)/recastnavigation location=$(PORTSSOURCEDIR)/openmw \
+    archive_origins=$(RECAST_REPOSITORIES) suffixes="zip" \
+    patches_origins=$(OPENMW_AROSDIR) \
+    patches_specs=$(RECAST_PATCHSPEC)
+%create_patch mmake=rpg-openmw-create-patch-recast archive=$(RECAST_ARCHBASE) \
+    suffixes="zip" srcdir=$(RECAST_ARCHSRCDIR) \
+    location=$(PORTSSOURCEDIR)/openmw destination=$(OPENMW_PORTS)/recastnavigation
+
+%fetch mmake=rpg-openmw-fetch-yamlcpp archive=$(YAMLCPP_ARCHBASE) \
+    destination=$(OPENMW_PORTS)/yaml-cpp location=$(PORTSSOURCEDIR)/openmw \
+    archive_origins=$(YAMLCPP_REPOSITORIES) suffixes="zip" \
+    patches_origins=$(OPENMW_AROSDIR) \
+    patches_specs=$(YAMLCPP_PATCHSPEC)
+%create_patch mmake=rpg-openmw-create-patch-yamlcpp archive=$(YAMLCPP_ARCHBASE) \
+    suffixes="zip" srcdir=$(YAMLCPP_ARCHSRCDIR) \
+    location=$(PORTSSOURCEDIR)/openmw destination=$(OPENMW_PORTS)/yaml-cpp
+
+%fetch mmake=rpg-openmw-fetch-sqlite archive=$(SQLITE_ARCHBASE) \
+    destination=$(OPENMW_PORTS)/sqlite3 location=$(PORTSSOURCEDIR)/openmw \
+    archive_origins=$(SQLITE_REPOSITORIES) suffixes="zip" \
+    patches_origins=$(OPENMW_AROSDIR) \
+    patches_specs=$(SQLITE_PATCHSPEC)
+%create_patch mmake=rpg-openmw-create-patch-sqlite archive=$(SQLITE_ARCHBASE) \
+    suffixes="zip" srcdir=$(SQLITE_ARCHSRCDIR) \
+    location=$(PORTSSOURCEDIR)/openmw destination=$(OPENMW_PORTS)/sqlite3
+
+#MM- rpg-openmw-fetch : \
+#MM      rpg-openmw-fetch-bullet \
+#MM      rpg-openmw-fetch-mygui \
+#MM      rpg-openmw-fetch-osg \
+#MM      rpg-openmw-fetch-recast \
+#MM      rpg-openmw-fetch-yamlcpp \
+#MM      rpg-openmw-fetch-sqlite
+
+#MM rpg-openmw : rpg-openmw-libs rpg-openmw-fetch
+
+#
+#  CMake configuration.
+#
+OPENMW_CMAKEOPTIONS := \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_OPENMW=ON \
+    -DBUILD_LAUNCHER=OFF \
+    -DBUILD_WIZARD=OFF \
+    -DBUILD_OPENCS=OFF \
+    -DBUILD_MWINIIMPORTER=OFF \
+    -DBUILD_ESSIMPORTER=OFF \
+    -DBUILD_BSATOOL=OFF \
+    -DBUILD_ESMTOOL=OFF \
+    -DBUILD_NIFTEST=OFF \
+    -DBUILD_NAVMESHTOOL=OFF \
+    -DBUILD_BULLETOBJECTTOOL=OFF \
+    -DBUILD_DOCS=OFF \
+    -DOPENMW_LTO_BUILD=OFF \
+    -DOPENMW_USE_SYSTEM_BULLET=OFF -DBULLET_STATIC=ON \
+    -DOPENMW_USE_SYSTEM_OSG=OFF -DOSG_STATIC=ON \
+    -DOPENMW_USE_SYSTEM_MYGUI=OFF -DMYGUI_STATIC=ON \
+    -DMYGUI_RENDERSYSTEM=1 \
+    -DOPENMW_USE_SYSTEM_RECASTNAVIGATION=OFF -DRECASTNAVIGATION_STATIC=ON \
+    -DOPENMW_USE_SYSTEM_YAML_CPP=OFF -DYAML_CPP_STATIC=ON \
+    -DOPENMW_USE_SYSTEM_SQLITE3=OFF \
+    -DOPENMW_USE_SYSTEM_ICU=ON -DICU_ROOT=$(AROS_DEVELOPER) \
+    -DUSE_LUAJIT=OFF \
+    -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
+    -DFETCHCONTENT_SOURCE_DIR_BULLET=$(OPENMW_PORTS)/bullet/$(BULLET_ARCHSRCDIR) \
+    -DFETCHCONTENT_SOURCE_DIR_MYGUI=$(OPENMW_PORTS)/mygui/$(MYGUI_ARCHSRCDIR) \
+    -DFETCHCONTENT_SOURCE_DIR_OSG=$(OPENMW_PORTS)/osg/$(OSG_ARCHSRCDIR) \
+    -DFETCHCONTENT_SOURCE_DIR_RECASTNAVIGATION=$(OPENMW_PORTS)/recastnavigation/$(RECAST_ARCHSRCDIR) \
+    -DFETCHCONTENT_SOURCE_DIR_YAML-CPP=$(OPENMW_PORTS)/yaml-cpp/$(YAMLCPP_ARCHSRCDIR) \
+    -DFETCHCONTENT_SOURCE_DIR_SQLITE3=$(OPENMW_PORTS)/sqlite3/$(SQLITE_ARCHSRCDIR) \
+    -DOSG_WINDOWING_SYSTEM=None \
+    -D_OPENTHREADS_ATOMIC_USE_GCC_BUILTINS=1 \
+    -D_OPENTHREADS_ATOMIC_USE_MIPOSPRO_BUILTINS=0 \
+    -D_OPENTHREADS_ATOMIC_USE_SUN=0 \
+    -D_OPENTHREADS_ATOMIC_USE_WIN32_INTERLOCKED=0 \
+    -D_OPENTHREADS_ATOMIC_USE_BSD_ATOMIC=0 \
+    -DBUILD_OSG_PLUGIN_DAE=OFF -DOPENMW_USE_OSG_DAE_PLUGIN=OFF \
+    -DBINDIR=. -DSYSCONFDIR=. -DDATADIR=. -DDATAROOTDIR=share -DICONDIR=share -DLICDIR=share \
+    -DCMAKE_PREFIX_PATH=$(AROS_DEVELOPER) \
+    -DLZ4_INCLUDE_DIR=$(AROS_INCLUDES) \
+    -DLZ4_LIBRARY=$(AROS_LIB)/liblz4.a \
+    -DSDL2_DIR=$(OPENMW_AROSDIR)/cmake \
+    -DBoost_DIR=$(OPENMW_AROSDIR)/cmake \
+    -DFREETYPE_LIBRARY=$(AROS_LIB)/libfreetype2.static.a \
+    -DFREETYPE_INCLUDE_DIR_ft2build=$(AROS_INCLUDES) \
+    -DFREETYPE_INCLUDE_DIR_freetype2=$(AROS_INCLUDES) \
+    -DLUA_INCLUDE_DIR=$(AROS_INCLUDES)/lua \
+    -DLUA_LIBRARIES=$(AROS_LIB)/liblua.a \
+    -DOPENGL_INCLUDE_DIR=$(AROS_INCLUDES) \
+    -DOPENGL_gl_LIBRARY=$(AROS_LIB)/libGL.a \
+    -DRUN_RESULT_VAR=0 -DRUN_RESULT_VAR__TRYRUN_OUTPUT= \
+    -DCMAKE_CXX_STANDARD_LIBRARIES="-lpthread $(AROS_CONTRIB_LIB)/libiconv.a $(AROS_LIB)/libnet.a"
+
+#  Install by hand: OpenMW's install() rules assume a Unix/Windows layout,
+#  while on AROS everything lives flat in the game drawer.
+OPENMW_INSTALLCMD := sh $(OPENMW_AROSDIR)/install.sh "$(OPENMW_PKGDIR)" "$(OPENMW_EXEDIR)" "$(STRIP)"
+
+%build_with_cmake mmake=rpg-openmw package=openmw \
+    srcdir=$(OPENMW_SRCDIR) \
+    prefix="$(OPENMW_EXEDIR)" usecppflags=no \
+    extraldflags="-static-libstdc++" \
+    extraoptions="$(OPENMW_CMAKEOPTIONS)" \
+    cmakeinstallcmd="$(OPENMW_INSTALLCMD)"
+
+%common

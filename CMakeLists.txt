@@ -302,6 +302,13 @@ set(USED_OSG_PLUGINS
     osgdb_serializers_osg
     osgdb_tga)
 
+# The COLLADA (.dae) loader needs collada-dom, which is not available on
+# every platform; allow building without it.
+option(OPENMW_USE_OSG_DAE_PLUGIN "Use the OSG COLLADA (osgdb_dae) plugin, requires collada-dom" ON)
+if(NOT OPENMW_USE_OSG_DAE_PLUGIN)
+    list(REMOVE_ITEM USED_OSG_PLUGINS osgdb_dae)
+endif()
+
 option(OPENMW_USE_SYSTEM_ICU "Use system ICU library instead of internal. If disabled, requires autotools" ON)
 if(OPENMW_USE_SYSTEM_ICU)
     find_package(ICU REQUIRED COMPONENTS uc i18n data)

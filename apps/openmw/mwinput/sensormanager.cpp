@@ -3,6 +3,11 @@
 #include <components/debug/debuglog.hpp>
 #include <components/settings/values.hpp>
 
+// The AROS SDL2 port is built without the sensor subsystem.
+#if defined(__AROS__)
+#define OPENMW_SDL_NO_SENSORS 1
+#endif
+
 namespace MWInput
 {
     SensorManager::SensorManager()
@@ -22,11 +27,13 @@ namespace MWInput
 
     SensorManager::~SensorManager()
     {
+#ifndef OPENMW_SDL_NO_SENSORS
         if (mGyroscope != nullptr)
         {
             SDL_SensorClose(mGyroscope);
             mGyroscope = nullptr;
         }
+#endif
     }
 
     void SensorManager::correctGyroscopeAxes()
@@ -71,6 +78,9 @@ namespace MWInput
 
     void SensorManager::updateSensors()
     {
+#ifdef OPENMW_SDL_NO_SENSORS
+        return;
+#else
         if (Settings::input().mEnableGyroscope)
         {
             int numSensors = SDL_NumSensors();
@@ -110,6 +120,7 @@ namespace MWInput
                 mGyroUpdateTimer = 0.f;
             }
         }
+#endif
     }
 
     void SensorManager::processChangedSettings(const Settings::CategorySettingVector& changed)
@@ -128,6 +139,10 @@ namespace MWInput
 
     void SensorManager::sensorUpdated(const SDL_SensorEvent& arg)
     {
+#ifdef OPENMW_SDL_NO_SENSORS
+        (void)arg;
+        return;
+#else
         if (!Settings::input().mEnableGyroscope)
             return;
 
@@ -152,6 +167,7 @@ namespace MWInput
             default:
                 break;
         }
+#endif
     }
 
     void SensorManager::update(float dt)

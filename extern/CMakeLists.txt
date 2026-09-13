@@ -179,6 +179,14 @@ if (NOT OPENMW_USE_SYSTEM_SQLITE3)
 
     add_library(sqlite3 STATIC ${sqlite3_SOURCE_DIR}/sqlite3.c)
     target_include_directories(sqlite3 INTERFACE ${sqlite3_SOURCE_DIR}/)
+    if (CMAKE_SYSTEM_NAME STREQUAL "AROS")
+        # No mmap()/shared memory on AROS: no WAL journal mode, no memory mapped I/O.
+        target_compile_definitions(sqlite3 PRIVATE
+            SQLITE_OMIT_WAL
+            SQLITE_MAX_MMAP_SIZE=0
+            SQLITE_OMIT_LOAD_EXTENSION
+            HAVE_USLEEP=1)
+    endif()
     if (UNIX)
         target_link_libraries(sqlite3 ${CMAKE_DL_LIBS})
     endif()

@@ -294,8 +294,22 @@ namespace Files
 
         if (str.empty() || str[0] != u8'?')
         {
-            if (!path.is_absolute())
+            bool absolute = path.is_absolute();
+#if defined(__AROS__)
+            // Native AROS paths are absolute when they carry a volume or
+            // assign name ("Volume:dir"), which std::filesystem does not know.
+            const auto colon = str.find(u8':');
+            const auto slash = str.find(u8'/');
+            if (colon != std::u8string::npos && (slash == std::u8string::npos || colon < slash))
+                absolute = true;
+#endif
+            if (!absolute)
                 path = basePath / path;
+#if defined(__AROS__)
+            // AROS DOS has no "." path component, so "PROGDIR:x/./data"
+            // (from "data=./data" in openmw.cfg) must be normalised.
+            path = path.lexically_normal();
+#endif
             return;
         }
 

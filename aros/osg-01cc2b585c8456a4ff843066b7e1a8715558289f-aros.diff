@@ -1,0 +1,77 @@
+diff -ruN osg-01cc2b585c8456a4ff843066b7e1a8715558289f/src/OpenThreads/CMakeLists.txt /home/kalamatee/builds/AROS/pc-x86_64-gcc16/bin/pc-x86_64/Ports/openmw/osg/osg-01cc2b585c8456a4ff843066b7e1a8715558289f/src/OpenThreads/CMakeLists.txt
+--- a/src/OpenThreads/CMakeLists.txt	2022-01-11 15:08:55.000000000 +0000
++++ b/src/OpenThreads/CMakeLists.txt	2026-09-13 02:31:08.576005451 +0100
+@@ -96,7 +96,8 @@
+         # examples)
+     ENDIF()
+ ELSE()
+-    IF(UNIX)
++    IF(UNIX OR AROS)
++        # AROS is not flagged UNIX by CMake but provides a pthread library.
+         SUBDIRS(pthreads)
+     ELSE()
+         MESSAGE("Sorry, OpenThreads may not support your platform")
+diff -ruN osg-01cc2b585c8456a4ff843066b7e1a8715558289f/src/osg/GLExtensions.cpp /home/kalamatee/builds/AROS/pc-x86_64-gcc16/bin/pc-x86_64/Ports/openmw/osg/osg-01cc2b585c8456a4ff843066b7e1a8715558289f/src/osg/GLExtensions.cpp
+--- a/src/osg/GLExtensions.cpp	2022-01-11 15:08:55.000000000 +0000
++++ b/src/osg/GLExtensions.cpp	2026-09-12 23:54:32.432509227 +0100
+@@ -52,6 +52,9 @@
+ #elif defined(__EMSCRIPTEN__)
+     // Emscripten ships EGL, which we use to get OpenGL function addresses.
+     #include <EGL/egl.h>
++#elif defined(__AROS__)
++    // Mesa's AROS front end exports its own entry point lookup.
++    #include <GL/gla.h>
+ #else
+     #include <dlfcn.h>
+ #endif
+@@ -405,6 +408,10 @@
+         // Use EGL to get OpenGL function address for Emscripten.
+         return convertPointerType<void*, __eglMustCastToProperFunctionPointerType>(eglGetProcAddress(funcName));
+ 
++    #elif defined(__AROS__)
++
++        return convertPointerType<void*, GLAProc>(glAGetProcAddress(reinterpret_cast<const GLubyte*>(funcName)));
++
+     #else // all other unixes
+ 
+         return dlsym(0, funcName);
+diff -ruN osg-01cc2b585c8456a4ff843066b7e1a8715558289f/src/osgDB/DynamicLibrary.cpp /home/kalamatee/builds/AROS/pc-x86_64-gcc16/bin/pc-x86_64/Ports/openmw/osg/osg-01cc2b585c8456a4ff843066b7e1a8715558289f/src/osgDB/DynamicLibrary.cpp
+--- a/src/osgDB/DynamicLibrary.cpp	2022-01-11 15:08:55.000000000 +0000
++++ b/src/osgDB/DynamicLibrary.cpp	2026-09-12 23:53:55.040153845 +0100
+@@ -25,6 +25,9 @@
+ #include <winbase.h>
+ #elif defined(__APPLE__) && defined(APPLE_PRE_10_3)
+ #include <mach-o/dyld.h>
++#elif defined(__AROS__)
++// AROS: no dlopen(); plugins are linked statically.
++#include <unistd.h>
+ #else // all other unix
+ #include <unistd.h>
+ #ifdef __hpux
+@@ -66,6 +69,8 @@
+ #elif defined(__hpux)
+         // fortunately, shl_t is a pointer
+         shl_unload (static_cast<shl_t>(_handle));
++#elif defined(__AROS__)
++        // never opened
+ #else // other unix
+         dlclose(_handle);
+ #endif
+@@ -113,6 +118,8 @@
+     // BIND_FIRST is necessary for some reason
+     handle = shl_load ( libraryName.c_str(), BIND_DEFERRED|BIND_FIRST|BIND_VERBOSE, 0);
+     return handle;
++#elif defined(__AROS__)
++    OSG_INFO << "DynamicLibrary: dynamic library loading is not supported on AROS (" << libraryName << ")" << std::endl;
+ #else // other unix
+ 
+ #if defined(__ANDROID__)
+@@ -170,6 +177,8 @@
+         OSG_WARN << "DynamicLibrary::error " << strerror(errno) << std::endl;
+         return NULL;
+     }
++#elif defined(__AROS__)
++    return NULL;
+ #else // other unix
+     void* sym = dlsym( _handle,  procName.c_str() );
+     if (!sym) {
