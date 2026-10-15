@@ -1,0 +1,14 @@
+diff -ruN mygui-MyGUI3.4.3.orig/CMakeLists.txt mygui-MyGUI3.4.3/CMakeLists.txt
+--- mygui-MyGUI3.4.3.orig/CMakeLists.txt	2026-10-15 00:44:45.148514056 +0100
++++ mygui-MyGUI3.4.3/CMakeLists.txt	2026-10-15 00:44:45.161869656 +0100
+@@ -71,7 +71,9 @@
+ 	endif (MYGUI_GCC_VISIBILITY)
+ 
+ 	# Fix x64 issues on Linux
+-	if(("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "x86_64" OR "${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "amd64") AND NOT APPLE)
++	# (not AROS: its executables are relocatable objects with no GOT, which
++	# -fPIC code would need)
++	if(("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "x86_64" OR "${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "amd64") AND NOT APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "AROS")
+ 		add_definitions(-fPIC)
+ 	endif()
+ endif ()
